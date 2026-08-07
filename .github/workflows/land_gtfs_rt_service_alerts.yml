@@ -1,0 +1,42 @@
+name: Poll BC Transit Service Alerts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  poll-service-alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Poll BC Transit
+        run: python scripts/land_gtfs_rt_service_alerts.py
+
+      - name: Verify Protobuf output
+        run: |
+          python -c "
+          from pathlib import Path
+          files = list(Path('output/service_alerts').rglob('*.pb'))
+          assert files, 'Poller did not produce a .pb file'
+          print(f'Generated: {files[0]}')
+          print(f'Bytes: {files[0].stat().st_size}')
+          "
+
+      - name: Upload polling result
+        uses: actions/upload-artifact@v4
+        with:
+          name: bc-transit-service-alerts
+          path: output/service_alerts/**/*.pb
+          if-no-files-found: error
+          retention-days: 3
