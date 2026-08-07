@@ -4,42 +4,74 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
 
 jobs:
   poll-service-alerts:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    environment: dev
+
+    env:
+      DATABRICKS_AUTH_TYPE: github-oidc
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      VOLUME_DIRECTORY: /Volumes/bc_transit/dev/transit_landing/raw/rt_service_alerts
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: "3.12"
 
       - name: Install locked dependencies
         run: uv sync --locked
 
-      - name: Poll BC Transit
-        run: uv run python scripts/land_gtfs_rt_service_alerts.py
-
-      - name: Verify Protobuf output
+      - name: Verify Databricks OIDC identity
         run: |
-          uv run python -c "
-          from pathlib import Path
-          files = list(Path('output/service_alerts').rglob('*.pb'))
-          assert files, 'Poller did not produce a .pb file'
-          print(f'Generated: {files[0]}')
-          print(f'Bytes: {files[0].stat().st_size}')
-          "
+          uv run python - <<'PY'
+          from databricks.sdk import WorkspaceClient
 
-      - name: Upload polling result
+          identity = WorkspaceClient().current_user.me()
+
+          print("Databricks identity:", identity.user_name)
+          print("Databricks identity id:", identity.id)
+          PY
+
+      - name: Poll BC Transit and publish to UC Volume
+        run: |
+          uv run python scripts/land_gtfs_rt_service_alerts.py \
+            --volume-directory "$VOLUME_DIRECTORY"
+
+      - name: Verify Protobuf and manifest output
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+
+          protobuf_files = list(
+              Path("output/service_alerts/payloads").glob("*.pb")
+          )
+          manifest_files = list(
+              Path("output/service_alerts/manifests").rglob("*.json")
+          )
+
+          assert protobuf_files, "Poller did not produce a .pb file"
+          assert manifest_files, "Poller did not produce a manifest"
+
+          print("Protobuf:", protobuf_files[0])
+          print("Bytes:", protobuf_files[0].stat().st_size)
+          print("Manifest:", manifest_files[0])
+          PY
+
+      - name: Upload polling manifest
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: bc-transit-service-alerts
-          path: output/service_alerts/**/*.pb
-          if-no-files-found: error
-          retention-days: 3
+          name: bc-transit-polling-manifest
+          path: output/service_alerts/manifests/**/*.json
+          if-no-files-found: warn
+          retention-days: 7
