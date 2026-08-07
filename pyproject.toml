@@ -1,0 +1,22 @@
+[project]
+name = "bc-transit-gtfsrt-poller"
+version = "0.1.0"
+description = "Poll BC Transit GTFS-Realtime feeds and publish immutable files to a Unity Catalog Volume."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "databricks-sdk>=0.72,<1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+    "ruff>=0.9,<1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

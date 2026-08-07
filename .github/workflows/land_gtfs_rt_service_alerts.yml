@@ -16,16 +16,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           python-version: "3.12"
 
+      - name: Install locked dependencies
+        run: uv sync --locked
+
       - name: Poll BC Transit
-        run: python scripts/land_gtfs_rt_service_alerts.py
+        run: uv run python scripts/land_gtfs_rt_service_alerts.py
 
       - name: Verify Protobuf output
         run: |
-          python -c "
+          uv run python -c "
           from pathlib import Path
           files = list(Path('output/service_alerts').rglob('*.pb'))
           assert files, 'Poller did not produce a .pb file'
