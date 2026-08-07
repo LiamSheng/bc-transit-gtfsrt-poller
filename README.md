@@ -1,75 +1,86 @@
+```markdown
 # BC Transit GTFS-Realtime Poller
 
-这个仓库是 BC Transit 数据链路的生产端。它负责：
+This repository serves as the producer / ingestion component for the BC Transit data pipeline. Its primary responsibilities include:
 
-1. 获取 Service Alerts Protobuf；
-2. 以完整 SHA-256 生成不可变文件名；
-3. 保存本地 polling manifest；
-4. 可选地把唯一 `.pb` 上传到 Databricks Unity Catalog Volume。
+1. Fetching GTFS-RT Service Alerts Protobuf payloads.
+2. Generating immutable filenames using full SHA-256 hashes.
+3. Persisting local polling manifests.
+4. Optionally uploading unique `.pb` payloads to a Databricks Unity Catalog (UC) Volume.
 
-它不负责解析 Protobuf，也不运行 Lakeflow Pipeline。解析与下游表由
-`demo_transit_telemetry` DAB 仓库负责。
+This repository does **not** handle Protobuf parsing or execute Lakeflow Pipelines. Payload decoding, structural validation, and downstream Delta table processing are handled separately by the `demo_transit_telemetry` DAB (Databricks Asset Bundle) repository.
 
-## 本地环境
+## Local Environment Setup
+
+Sync project dependencies using `uv`:
 
 ```bash
 uv sync
+
 ```
 
-## 只运行本地 poller
+## Running Locally
+
+Run the poller script locally without remote upload:
 
 ```bash
 uv run python scripts/land_gtfs_rt_service_alerts.py
+
 ```
 
-输出位置：
+### Output Locations
 
 ```text
-output/service_alerts/payloads/service_alerts_<完整 SHA-256>.pb
+output/service_alerts/payloads/service_alerts_<FULL_SHA256>.pb
 output/service_alerts/manifests/attempt_date=YYYY-MM-DD/<attempt_id>.json
+
 ```
 
-## 发布到开发环境 UC Volume
+## Publishing to Dev UC Volume
 
-首先确认 Databricks CLI 的 `DEFAULT` profile 有效：
+First, verify that your Databricks CLI `DEFAULT` authentication profile is active:
 
 ```bash
 databricks auth login \
-  --host https://8259556718515952.2.gcp.databricks.com \
+  --host [https://8259556718515952.2.gcp.databricks.com](https://8259556718515952.2.gcp.databricks.com) \
   --profile DEFAULT
+
 ```
 
-然后运行：
+Then, run the landing script with the target UC Volume directory specified:
 
 ```bash
 uv run python scripts/land_gtfs_rt_service_alerts.py \
   --volume-directory /Volumes/bc_transit/dev/transit_landing/raw/rt_service_alerts \
   --databricks-profile DEFAULT
+
 ```
 
-上传使用 `overwrite=False`。相同内容始终映射到同一个远端文件：
+Uploads strictly enforce `overwrite=False` for idempotency. Identical payloads always map to the exact same remote file path:
 
 ```text
 /Volumes/bc_transit/dev/transit_landing/raw/rt_service_alerts/
-  service_alerts_<完整 SHA-256>.pb
+  service_alerts_<FULL_SHA256>.pb
+
 ```
 
-## 与 DAB 仓库的契约
+## Interface Contract with DAB Repository
 
 ```text
 poller
-  -> UC Volume 中的不可变 .pb
-  -> Auto Loader binaryFile Bronze
+  -> Immutable .pb in UC Volume
+  -> Auto Loader (binaryFile) Bronze
   -> from_protobuf Silver
-  -> decode/structure failure quarantine
+  -> Decode/Structure failure quarantine
+
 ```
 
-poller 不调用 DAB 源码，DAB 也不调用 poller 源码。两者只通过 UC Volume
-路径、文件扩展名和内容寻址命名约定协作。
+The poller and DAB repositories are completely decoupled; neither invokes or references code from the other. Inter-repository coordination relies solely on the UC Volume directory path, file extension (`.pb`), and content-addressed naming conventions.
 
-## 测试
+## Testing & Quality Checks
 
 ```bash
 uv run pytest
 uv run ruff check .
+
 ```
