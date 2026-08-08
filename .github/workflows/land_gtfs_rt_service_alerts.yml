@@ -3,10 +3,14 @@ name: Poll BC Transit Service Alerts
 on:
   workflow_dispatch:
   schedule:
-    # Poll every 15 minutes, offset from quarter-hour Databricks runs and the
-    # high-load start of the hour. Scheduled workflows may still be delayed;
-    # Auto Loader checkpointing provides catch-up on a later consumer run.
-    - cron: "7,22,37,52 * * * *"
+    # Poll on a nominal 45-minute cadence. A single */45 expression would run
+    # at minutes 00 and 45 of every hour, creating alternating 45- and
+    # 15-minute gaps. These four schedules preserve a 45-minute UTC cadence
+    # across hour and day boundaries. GitHub may still delay scheduled runs.
+    - cron: "7 0-23/3 * * *"
+    - cron: "52 0-23/3 * * *"
+    - cron: "37 1-23/3 * * *"
+    - cron: "22 2-23/3 * * *"
 
 concurrency:
   # Do not cancel an in-flight publish attempt. Queue the next invocation so
