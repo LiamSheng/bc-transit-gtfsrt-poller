@@ -2,6 +2,17 @@ name: Poll BC Transit Service Alerts
 
 on:
   workflow_dispatch:
+  schedule:
+    # Poll every 15 minutes, offset from quarter-hour Databricks runs and the
+    # high-load start of the hour. Scheduled workflows may still be delayed;
+    # Auto Loader checkpointing provides catch-up on a later consumer run.
+    - cron: "7,22,37,52 * * * *"
+
+concurrency:
+  # Do not cancel an in-flight publish attempt. Queue the next invocation so
+  # every polling attempt can finish and leave its manifest.
+  group: bc-transit-service-alerts-poller-dev
+  cancel-in-progress: false
 
 permissions:
   id-token: write
