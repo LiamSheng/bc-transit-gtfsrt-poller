@@ -1,12 +1,9 @@
 name: Poll BC Transit Service Alerts
 
 on:
+  # Scheduled production polling moved to the Databricks-managed Poller Job.
+  # Keep this manual trigger as the rollback entry point.
   workflow_dispatch:
-  schedule:
-    # Poll every 15 minutes, offset from quarter-hour Databricks runs and the
-    # high-load start of the hour. Scheduled workflows may still be delayed;
-    # Auto Loader checkpointing provides catch-up on a later consumer run.
-    - cron: "7,22,37,52 * * * *"
 
 concurrency:
   # Do not cancel an in-flight publish attempt. Queue the next invocation so
